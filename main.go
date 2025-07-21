@@ -54,9 +54,11 @@ func NewManager(cfg ServiceConfig, opts ...Option) *Manager {
 		cfg.SystemdFile = fmt.Sprintf("/etc/systemd/system/%s", cfg.ServiceName)
 	}
 
-	// default generation flags
-	if !cfg.MakeLogrotate && !cfg.MakeHTTPRotate && cfg.LogDir != "" {
-		cfg.MakeLogrotate = true
+	if cfg.MakeLogrotate && cfg.LogDir == "" {
+		cfg.MakeLogrotate = false
+	}
+	if cfg.MakeHTTPRotate && cfg.LogDir == "" {
+		cfg.MakeHTTPRotate = false
 	}
 
 	m := &Manager{cfg: cfg}
