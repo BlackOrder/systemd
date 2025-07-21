@@ -60,6 +60,19 @@ func WithNotifyAccess() ServiceOpt {
 	}
 }
 
+// WithLogrotate enables logrotate for the core log.
+func WithLogrotate() ServiceOpt {
+	return func(c *ServiceConfig) {
+		c.MakeLogrotate = true
+	}
+}
+
+func WithHTTPRotate() ServiceOpt {
+	return func(c *ServiceConfig) {
+		c.MakeHTTPRotate = true
+	}
+}
+
 // NewServiceConfig builds the core struct, applies opts, and
 // auto‑fills derived fields (UniqueName, ServiceName, SystemdFile).
 func NewServiceConfig(
