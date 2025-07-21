@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 // ServiceConfig holds settings for the systemd service.
@@ -20,10 +21,9 @@ type ServiceConfig struct {
 	SystemdFile string // defaults to /etc/systemd/system/<ServiceName>
 
 	// Customisation
-	WatchdogSec    string // e.g. "30s" – inserted into [Service]
-	ExtraUnit      string // raw lines appended to [Service]
-	MakeLogrotate  bool   // generate logrotate for core log
-	MakeHTTPRotate bool   // generate http logrotate (requires LogDir)
+	ServiceLines   []string // raw lines appended to [Service]
+	MakeLogrotate  bool     // generate logrotate for core log
+	MakeHTTPRotate bool     // generate http logrotate (requires LogDir)
 }
 
 // Manager controls installation and uninstallation of a systemd service.
@@ -188,13 +188,7 @@ func ensureServiceUser(user, group string) error {
 }
 
 func writeSystemdUnit(c ServiceConfig) error {
-	extra := ""
-	if c.WatchdogSec != "" {
-		extra += fmt.Sprintf("WatchdogSec=%s\n", c.WatchdogSec)
-	}
-	if c.ExtraUnit != "" {
-		extra += c.ExtraUnit + "\n"
-	}
+	extra := strings.Join(c.ServiceLines, "\n") + "\n"
 
 	unit := fmt.Sprintf(`[Unit]
 Description=%s
