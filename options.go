@@ -2,6 +2,7 @@ package systemd
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
 	"regexp"
 )
@@ -81,9 +82,7 @@ func WithStreams(streams map[string]string) ServiceOpt {
 		if c.Streams == nil {
 			c.Streams = make(map[string]string)
 		}
-		for name, file := range streams {
-			c.Streams[name] = file
-		}
+		maps.Copy(c.Streams, streams)
 	}
 }
 
