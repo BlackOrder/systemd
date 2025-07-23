@@ -209,10 +209,12 @@ func writeRsyslogConf(c ServiceConfig) error {
 	configs := []string{}
 	for name, file := range c.Streams {
 		configs = append(configs, fmt.Sprintf(`if $msg contains 'stream=%s' then {
-			action(type="omfile" file="%s/%s" template="%s")
-			stop
-		}
-		`, name, c.LogDir, file, c.UniqueName))
+	action(type="omfile" file="%s/%s" template="%s"
+         dirCreateMode="0750" dirOwner="%s" dirGroup="%s"
+		 fileCreateMode="0640" fileOwner="%s" fileGroup="%s")
+	stop
+}
+`, name, c.LogDir, file, c.UniqueName, c.User, c.Group, c.User, c.Group))
 	}
 	if len(configs) == 0 {
 		return nil // no streams to configure
@@ -220,8 +222,7 @@ func writeRsyslogConf(c ServiceConfig) error {
 	conf := fmt.Sprintf(`module(load="imuxsock")
 module(load="imklog")
 module(load="omfile")
-template(name="%s" type="string"
-		  string="%%msg%%\n")
+template(name="%s" type="string" string="%%msg%%\n")
 %s`, c.UniqueName, strings.Join(configs, "\n"))
 
 	return os.WriteFile(rsyslogPath(c), []byte(conf), 0644)
