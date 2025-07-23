@@ -67,9 +67,23 @@ func WithLogrotate() ServiceOpt {
 	}
 }
 
-func WithHTTPRotate() ServiceOpt {
+func WithStream(name, file string) ServiceOpt {
 	return func(c *ServiceConfig) {
-		c.MakeHTTPRotate = true
+		if c.Streams == nil {
+			c.Streams = make(map[string]string)
+		}
+		c.Streams[name] = file
+	}
+}
+
+func WithStreams(streams map[string]string) ServiceOpt {
+	return func(c *ServiceConfig) {
+		if c.Streams == nil {
+			c.Streams = make(map[string]string)
+		}
+		for name, file := range streams {
+			c.Streams[name] = file
+		}
 	}
 }
 

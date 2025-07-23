@@ -21,9 +21,9 @@ type ServiceConfig struct {
 	SystemdFile string // defaults to /etc/systemd/system/<ServiceName>
 
 	// Customisation
-	ServiceLines   []string // raw lines appended to [Service]
-	MakeLogrotate  bool     // generate logrotate for core log
-	MakeHTTPRotate bool     // generate http logrotate (requires LogDir)
+	ServiceLines  []string          // raw lines appended to [Service]
+	MakeLogrotate bool              // generate logrotate for core log
+	Streams       map[string]string // map of stream names to log file names
 }
 
 // Manager controls installation and uninstallation of a systemd service.
@@ -57,9 +57,6 @@ func NewManager(cfg ServiceConfig, opts ...Option) *Manager {
 	if cfg.MakeLogrotate && cfg.LogDir == "" {
 		cfg.MakeLogrotate = false
 	}
-	if cfg.MakeHTTPRotate && cfg.LogDir == "" {
-		cfg.MakeHTTPRotate = false
-	}
 
 	m := &Manager{cfg: cfg}
 	for _, opt := range opts {
@@ -88,7 +85,7 @@ func (m *Manager) Install() error {
 		}
 		m.info("rsyslog config written")
 
-		if c.MakeLogrotate || c.MakeHTTPRotate {
+		if c.MakeLogrotate {
 			if err := writeLogrotateConfs(c); err != nil {
 				return m.fail(err)
 			}
@@ -125,8 +122,7 @@ func (m *Manager) Uninstall() error {
 	paths := []string{
 		c.SystemdFile,
 		rsyslogPath(c),
-		logrotateCorePath(c),
-		logrotateHTTPPath(c),
+		logrotateCorePath(c) + "-*",
 	}
 	for _, p := range paths {
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
@@ -210,74 +206,65 @@ WantedBy=multi-user.target
 }
 
 func writeRsyslogConf(c ServiceConfig) error {
-	conf := fmt.Sprintf(`template(name="%s" type="string"
-         string="%%msg%%\n")
+	configs := []string{}
+	for name, file := range c.Streams {
+		configs = append(configs, fmt.Sprintf(`if $msg contains 'stream=%s' then {
+			action(type="omfile" file="%s/%s" template="%s")
+			stop
+		}
+		`, name, c.LogDir, file, c.UniqueName))
+	}
+	if len(configs) == 0 {
+		return nil // no streams to configure
+	}
+	conf := fmt.Sprintf(`module(load="imuxsock")
+module(load="imklog")
+module(load="omfile")
+template(name="%s" type="string"
+		  string="%%msg%%\n")
+%s`, c.UniqueName, strings.Join(configs, "\n"))
 
-if $msg contains 'stream=CORE' then {
-  action(type="omfile" file="%s/core.log" template="%s")
-  stop
-}
-`, c.UniqueName, c.LogDir, c.UniqueName)
-
-	return os.WriteFile(rsyslogPath(c), []byte(conf), 0644)
+	return os.WriteFile(rsyslogPath(c), []byte(conf), 0640)
 }
 
 func writeLogrotateConfs(c ServiceConfig) error {
-	if !c.MakeLogrotate && !c.MakeHTTPRotate {
+	if !c.MakeLogrotate {
 		return nil
 	}
 
-	core := fmt.Sprintf(`%s/core.log {
-    weekly
-    rotate 8
-    size 100M
-    compress
-    delaycompress
-    missingok
-    notifempty
-    create 0640 %s %s
-    sharedscripts
-    postrotate
-        systemctl kill -s HUP rsyslog.service
-    endscript
-}
-`, c.LogDir, c.User, c.Group)
+	if c.Streams == nil {
+		return nil
+	}
 
-	http := fmt.Sprintf(`%s/http.log {
-    daily
-    rotate 14
-    size 50M
-    compress
-    delaycompress
-    missingok
-    notifempty
-    create 0640 %s %s
-    sharedscripts
-    postrotate
-        systemctl kill -s HUP rsyslog.service
-    endscript
-}
-`, c.LogDir, c.User, c.Group)
-
-	if c.MakeLogrotate {
-		if err := os.WriteFile(logrotateCorePath(c), []byte(core), 0644); err != nil {
+	for name, file := range c.Streams {
+		log := fmt.Sprintf(`%s/%s {
+	weekly
+	    weekly
+	    rotate 8
+	    size 100M
+	    compress
+	    delaycompress
+	    missingok
+	    notifempty
+	    create 0640 %s %s
+	    sharedscripts
+	    postrotate
+	        systemctl kill -s HUP rsyslog.service
+	    endscript
+	}
+	`, c.LogDir, file, c.User, c.Group)
+		if err := os.WriteFile(
+			logrotateCorePath(c)+"-"+name, []byte(log), 0640); err != nil {
 			return err
 		}
 	}
-	if c.MakeHTTPRotate {
-		if err := os.WriteFile(logrotateHTTPPath(c), []byte(http), 0644); err != nil {
-			return err
-		}
-	}
+
 	return nil
 }
 
 func rsyslogPath(c ServiceConfig) string { return fmt.Sprintf("/etc/rsyslog.d/%s.conf", c.UniqueName) }
 func logrotateCorePath(c ServiceConfig) string {
-	return fmt.Sprintf("/etc/logrotate.d/%s-core", c.UniqueName)
-}
-func logrotateHTTPPath(c ServiceConfig) string {
-	return fmt.Sprintf("/etc/logrotate.d/%s-http", c.UniqueName)
+	return fmt.Sprintf("/etc/logrotate.d/%s", c.UniqueName)
 }
 
 func execOutput(cmd string, args ...string) ([]byte, error) {
