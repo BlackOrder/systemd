@@ -224,7 +224,7 @@ template(name="%s" type="string"
 		  string="%%msg%%\n")
 %s`, c.UniqueName, strings.Join(configs, "\n"))
 
-	return os.WriteFile(rsyslogPath(c), []byte(conf), 0640)
+	return os.WriteFile(rsyslogPath(c), []byte(conf), 0644)
 }
 
 func writeLogrotateConfs(c ServiceConfig) error {
@@ -254,7 +254,7 @@ func writeLogrotateConfs(c ServiceConfig) error {
 	}
 	`, c.LogDir, file, c.User, c.Group)
 		if err := os.WriteFile(
-			logrotateCorePath(c)+"-"+name, []byte(log), 0640); err != nil {
+			logrotateCorePath(c)+"-"+name, []byte(log), 0644); err != nil {
 			return err
 		}
 	}
